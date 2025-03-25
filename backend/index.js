@@ -43,8 +43,9 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
       db.run(`CREATE TABLE IF NOT EXISTS expense_categories (
         id INTEGER PRIMARY KEY,
-        group_id INTEGER NOT NULL,
+        group_id INTEGER,
         name TEXT NOT NULL,
+        UNIQUE (group_id, name),
         FOREIGN KEY (group_id) REFERENCES expense_groups(id)
       )`);
 
@@ -305,6 +306,56 @@ appExpress.post('/transactions', validate(transactionValidations), (req, res) =>
   });
 });
 
+// Cambiar el manejo de respuesta vacía en GET /income-categories
+appExpress.get('/income-categories', (req, res) => {
+  db.all('SELECT * FROM income_categories', (err, rows) => {
+    if (err) {
+      console.error('Error en consulta de categorías:', err);
+      return res.status(500).json({ 
+        error: 'Error en base de datos',
+        details: err.message 
+      });
+    }
+    
+    // Siempre devolver 200 incluso si no hay resultados
+    res.json(rows || []); // Devuelve array vacío si no hay datos
+  });
+});
+
+// Manejar eliminaciones en delete /income-categories
+appExpress.delete('/income-categories/:id', (req, res) => { // ✅
+  const { id } = req.params; // ✅ Obtener ID de parámetros de la URL
+  
+  // Validación adicional recomendada
+  if (!Number.isInteger(Number(id))) {
+    return res.status(400).json({ error: 'ID debe ser un número entero' });
+  }
+
+  // Verificar existencia antes de eliminar
+  db.get('SELECT id FROM income_categories WHERE id = ?', [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Categoría no encontrada' });
+
+    // Eliminación propiamente dicha
+    db.run(`DELETE FROM income_categories WHERE id = ?`, [id], function(err) {
+      if (err) {
+        // Manejar error de FK constraint (si hay transacciones relacionadas)
+        if (err.message.includes('FOREIGN KEY')) {
+          return res.status(409).json({ 
+            error: 'No se puede eliminar: Existen transacciones relacionadas',
+            solution: 'Elimina o actualiza las transacciones primero'
+          });
+        }
+        return res.status(500).json({ error: err.message });
+      }
+      res.status(200).json({ 
+        message: 'Eliminado exitosamente',
+        deletedId: id
+      });
+    });
+  });
+});
+
 // Endpoints existentes actualizados con validación
 appExpress.post('/income-categories', [
   body('name').isString().trim().notEmpty(),
@@ -324,6 +375,82 @@ appExpress.post('/income-categories', [
   );
 });
 
+// backend/index.js (agregar después del POST /income-categories)
+appExpress.put('/income-categories/:id', [
+  body('name').isString().trim().notEmpty(),
+  body('description').optional().isString().trim()
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const { id } = req.params;
+  const { name, description } = req.body;
+
+  // Validar ID numérico
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'ID de categoría inválido' });
+  }
+
+  // Verificar existencia de la categoría
+  db.get('SELECT id FROM income_categories WHERE id = ?', [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Categoría no encontrada' });
+
+    // Verificar unicidad del nuevo nombre
+    db.get(
+      'SELECT id FROM income_categories WHERE name = ? AND id != ?',
+      [name.trim(), id],
+      (err, existing) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (existing) {
+          return res.status(409).json({ error: 'El nombre ya existe' });
+        }
+
+        // Actualizar la categoría
+        db.run(
+          `UPDATE income_categories 
+           SET name = ?, description = ?
+           WHERE id = ?`,
+          [name.trim(), description?.trim(), id],
+          function(err) {
+            if (err) {
+              // Manejar errores de base de datos
+              if (err.message.includes('SQLITE_CONSTRAINT')) {
+                return res.status(409).json({ error: 'El nombre ya existe' });
+              }
+              return res.status(500).json({ error: err.message });
+            }
+            
+            if (this.changes === 0) {
+              return res.status(404).json({ error: 'Categoría no encontrada' });
+            }
+            
+            res.json({
+              id: Number(id),
+              name: name.trim(),
+              description: description?.trim()
+            });
+          }
+        );
+      }
+    );
+  });
+});
+// Cambiar el manejo de respuesta vacía en GET /expense-groups
+appExpress.get('/expense-groups', (req, res) => {
+  db.all('SELECT * FROM expense_groups', (err, rows) => {
+    if (err) {
+      console.error('Error en consulta de grupo:', err);
+      return res.status(500).json({ 
+        error: 'Error en base de datos',
+        details: err.message 
+      });
+    }
+    
+    // Siempre devolver 200 incluso si no hay resultados
+    res.json(rows || []); // Devuelve array vacío si no hay datos
+  });
+});
 appExpress.post('/expense-groups', [
   body('name').isString().trim().notEmpty()
 ], (req, res) => {
@@ -341,20 +468,116 @@ appExpress.post('/expense-groups', [
   );
 });
 
+// Manejar eliminaciones en delete /expense-groups
+appExpress.delete('/expense-groups/:id', (req, res) => {
+  const { id } = req.params;
+
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+
+    // 1. Verificar si existen transacciones relacionadas
+    db.get(
+      `SELECT COUNT(*) as total 
+       FROM transactions t
+       JOIN expense_categories ec ON t.category_id = ec.id
+       WHERE ec.group_id = ?`,
+      [id],
+      (err, row) => {
+        if (err) {
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: err.message });
+        }
+
+        if (row.total > 0) {
+          db.run('ROLLBACK');
+          return res.status(409).json({
+            error: 'Existen transacciones relacionadas',
+            solution: 'Elimina primero las transacciones asociadas a las categorías de este grupo'
+          });
+        }
+
+        // 2. Eliminar categorías
+        db.run(
+          'DELETE FROM expense_categories WHERE group_id = ?',
+          [id],
+          function(err) {
+            if (err) {
+              db.run('ROLLBACK');
+              return res.status(500).json({ error: err.message });
+            }
+
+            // 3. Eliminar grupo
+            db.run(
+              'DELETE FROM expense_groups WHERE id = ?',
+              [id],
+              function(err) {
+                if (err) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ error: err.message });
+                }
+
+                if (this.changes === 0) {
+                  db.run('ROLLBACK');
+                  return res.status(404).json({ error: 'Grupo no encontrado' });
+                }
+
+                db.run('COMMIT');
+                res.json({
+                  message: 'Grupo y categorías eliminados',
+                  deletedId: id,
+                  deletedCategories: this.changes
+                });
+              }
+            );
+          }
+        );
+      }
+    );
+  });
+});
+
+// endpoint POST /expense-categories
 appExpress.post('/expense-categories', [
-  body('group_id').isInt({ gt: 0 }),
+  body('group_id').optional().isInt({ gt: 0 }).toInt(),
   body('name').isString().trim().notEmpty()
 ], (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const { group_id, name } = req.body;
-  db.run(
-    'INSERT INTO expense_categories (group_id, name) VALUES (?, ?)',
-    [group_id, name.trim()],
-    function(err) {
-      if (err) res.status(500).json({ error: err.message });
-      else res.json({ id: this.lastID });
+  const finalGroupId = group_id || null;
+
+  // Verificar unique compuesto
+  db.get(
+    `SELECT id FROM expense_categories 
+     WHERE name = ? AND (group_id = ? OR (group_id IS NULL AND ? IS NULL))`,
+    [name.trim(), finalGroupId, finalGroupId],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (row) return res.status(409).json({ error: 'La categoría ya existe en este grupo' });
+
+      db.run(
+        'INSERT INTO expense_categories (group_id, name) VALUES (?, ?)',
+        [finalGroupId, name.trim()],
+        function(err) {
+          if (err) {
+            if (err.message.includes('SQLITE_CONSTRAINT')) {
+              return res.status(409).json({ error: 'Error de restricción única' });
+            }
+            return res.status(500).json({ error: err.message });
+          }
+          res.status(201).json({ 
+            id: this.lastID,
+            group_id: finalGroupId,
+            name: name.trim(),
+            message: 'Categoría creada exitosamente'
+          });
+        }
+      );
     }
   );
 });

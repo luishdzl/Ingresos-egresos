@@ -15,6 +15,7 @@ function createWindow() {
       // No se habilita la integración de Node en el render para mayor seguridad
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
 

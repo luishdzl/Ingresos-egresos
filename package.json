@@ -1,5 +1,5 @@
 {
-  "name": "gym-tracker",
+  "name": "ingreso-egreso",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
@@ -8,8 +8,8 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.tuempresa.gymtracker",
-    "productName": "GymTracker",
+    "appId": "com.tuempresa.ingresoegreso",
+    "productName": "IngresoEgreso",
     "directories": {
       "output": "dist"
     },

@@ -1,15 +1,18 @@
-// src/components/Categories/ExpenseCategoriesManager.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import API from '../../api';
 import { useForm } from 'react-hook-form';
+import { ConfirmationModal } from '../common/ConfirmationModal';
+import { useNotifications } from '../common/Notifications';
 
 export const ExpenseCategoriesManager = () => {
   const queryClient = useQueryClient();
-  const [selectedGroup, setSelectedGroup] = useState(null);
   const { register, handleSubmit, reset } = useForm();
-  
-  // Obtener grupos y categorías
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const { showNotification } = useNotifications();
+
+  // Consultar datos
   const { data: groups } = useQuery({
     queryKey: ['expense-groups'],
     queryFn: API.categories.expense.groups.get,
@@ -21,98 +24,152 @@ export const ExpenseCategoriesManager = () => {
   });
 
   // Mutaciones
-  const createGroup = useMutation({
-    mutationFn: API.categories.expense.groups.create,
-    onSuccess: () => queryClient.invalidateQueries(['expense-groups'])
-  });
-
   const createCategory = useMutation({
-    mutationFn: API.categories.expense.categories.create,
+    mutationFn: (data) => API.categories.expense.categories.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries(['expense-categories']);
       reset();
+      showNotification('Categoría creada exitosamente', 'success');
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.error || 'Error desconocido';
+      showNotification(errorMessage, 'error');
+    }
+  });
+  
+  const updateCategory = useMutation({
+    mutationFn: (data) => API.categories.expense.categories.update(data.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['expense-categories']);
+      setSelectedCategory(null);
+      showNotification('Categoría actualizada exitosamente', 'success');
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.error || 'Error desconocido';
+      showNotification(errorMessage, 'error');
+    }
+  });
+
+  const deleteCategory = useMutation({
+    mutationFn: (id) => API.categories.expense.categories.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['expense-categories']);
+      setDeleteCandidate(null);
+      showNotification('Categoría eliminada correctamente', 'success');
+    },
+    onError: (error) => {
+      showNotification(`Error: ${error.message}`, 'error');
     }
   });
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-xl font-semibold mb-4">Categorías de Gastos</h2>
-      
-      {/* Gestión de Grupos */}
-      <div className="mb-8">
-        <h3 className="font-medium mb-2">Grupos de gastos</h3>
-        <form 
-          onSubmit={handleSubmit(data => createGroup.mutate(data))}
-          className="flex gap-4 mb-4"
-        >
+
+      {/* Formulario de categoría */}
+      <form 
+        onSubmit={handleSubmit(data => {
+          // Eliminar group_id si es una cadena vacía
+          const formData = { ...data };
+          if (formData.group_id === '') {
+            delete formData.group_id;
+          }
+
+          selectedCategory 
+            ? updateCategory.mutate({ ...formData, id: selectedCategory.id })
+            : createCategory.mutate(formData);
+        })}
+        className="mb-8"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <input
             {...register('name', { required: true })}
-            placeholder="Nuevo grupo"
-            className="flex-1 p-2 border rounded"
+            placeholder="Nombre de categoría"
+            className="p-2 border rounded"
+            defaultValue={selectedCategory?.name}
           />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          
+          <select
+            {...register('group_id')}
+            className="p-2 border rounded"
+            defaultValue={selectedCategory?.group_id || ''}
           >
-            Crear Grupo
-          </button>
-        </form>
-        
-        <div className="flex flex-wrap gap-2">
-          {groups?.map(group => (
-            <button
-              key={group.id}
-              onClick={() => setSelectedGroup(group.id)}
-              className={`px-4 py-2 rounded ${
-                selectedGroup === group.id 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-200 hover:bg-gray-300'
-              }`}
-            >
-              {group.name}
-            </button>
-          ))}
-        </div>
-      </div>
+            <option value="">Sin grupo</option>
+            {groups?.map(group => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
 
-      {/* Gestión de Categorías */}
-      {selectedGroup && (
-        <div>
-          <h3 className="font-medium mb-2">Subcategorías</h3>
-          <form 
-            onSubmit={handleSubmit(data => {
-              createCategory.mutate({ ...data, group_id: selectedGroup })
-            })}
-            className="flex gap-4 mb-4"
-          >
-            <input
-              {...register('name', { required: true })}
-              placeholder="Nueva subcategoría"
-              className="flex-1 p-2 border rounded"
-            />
+          <div className="flex gap-2">
             <button
               type="submit"
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex-1"
             >
-              Agregar
+              {selectedCategory ? 'Actualizar' : 'Agregar'}
             </button>
-          </form>
-          
-          <div className="grid gap-2">
-            {categories
-              ?.filter(c => c.group_id === selectedGroup)
-              ?.map(category => (
-                <div key={category.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                  <span>{category.name}</span>
-                  <div className="flex gap-2">
-                    <button className="text-blue-600">Editar</button>
-                    <button className="text-red-600">Eliminar</button>
-                  </div>
-                </div>
-              ))}
+            {selectedCategory && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(null)}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+            )}
           </div>
         </div>
-      )}
+      </form>
+
+      {/* Listado de categorías */}
+      <div className="grid gap-2">
+        {categories?.map(category => {
+          const group = groups?.find(g => g.id === category.group_id);
+          return (
+            <div key={category.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+              <div>
+                <span className="font-medium">{category.name}</span>
+                {group && (
+                  <span className="ml-2 text-sm text-gray-500">
+                    (Grupo: {group.name})
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedCategory(category)}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => setDeleteCandidate(category)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal de confirmación */}
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={() => deleteCategory.mutate(deleteCandidate.id)}
+        title="Confirmar eliminación"
+      >
+        {deleteCandidate && (
+          <>
+            <p>¿Eliminar la categoría <strong>{deleteCandidate.name}</strong>?</p>
+            <p className="text-red-600 text-sm mt-2">¡Esta acción es irreversible!</p>
+          </>
+        )}
+      </ConfirmationModal>
     </div>
   );
 };

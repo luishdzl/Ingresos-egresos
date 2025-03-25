@@ -7,6 +7,7 @@ import { TransactionForm } from './components/Transactions/TransactionForm';
 import { TransactionList } from './components/Transactions/TransactionList';
 import { IncomeCategoriesManager } from './components/Categories/IncomeCategoriesManager';
 import { ExpenseCategoriesManager } from './components/Categories/ExpenseCategoriesManager';
+import { NotificationProvider } from './components/common/Notifications'; 
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ const MainLayout = ({ children }) => {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+            <NotificationProvider>
       <Router>
         <MainLayout>
           <Routes>
@@ -81,7 +83,10 @@ export default function App() {
           </Routes>
         </MainLayout>
       </Router>
+      </NotificationProvider>
       <ReactQueryDevtools initialIsOpen={false} />
+
+
     </QueryClientProvider>
   );
 }
