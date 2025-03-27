@@ -2,19 +2,38 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import API from '../api';
 
-export const useTransactions = (params) => {
+export const useTransactions = (params = {}) => {
   return useQuery({
     queryKey: ['transactions', params],
-    queryFn: () => API.transactions.get(params),
+    queryFn: async () => {
+      try {
+        const response = await API.transactions.get(params);
+        return {
+          data: response.data,
+          pagination: response.pagination || { totalPages: 1 }
+        };
+      } catch (error) {
+        throw new Error(error.message || 'Error al obtener transacciones');
+      }
+    },
+    staleTime: 30000,
+    retry: (failureCount, error) => {
+      if (error.message.includes(404)) return false;
+      return failureCount < 2;
+    }
   });
 };
 
 export const useCreateTransaction = () => {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: API.transactions.create,
+    mutationFn: async (newTransaction) => {
+      const response = await API.transactions.create(newTransaction);
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['transactions']);
-    },
+    }
   });
 };

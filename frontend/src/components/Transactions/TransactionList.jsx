@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useTransactions } from '../../hooks/useTransactions';
+import { useTransactions, useCreateTransaction } from '../../hooks/useTransactions';
 import { Pagination } from '../UI/Pagination';
 import { format, parseISO } from 'date-fns';
+import { useQueryClient } from '@tanstack/react-query';
+
 
 export const TransactionList = () => {
   const [page, setPage] = useState(1);
@@ -11,8 +13,8 @@ export const TransactionList = () => {
     start_date: '',
     end_date: ''
   });
-
-  const { data, isLoading, isError } = useTransactions({
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, error } = useTransactions({
     page,
     limit,
     ...filters
@@ -25,7 +27,17 @@ export const TransactionList = () => {
   };
 
   if (isLoading) return <div className="text-center py-4">Cargando transacciones...</div>;
-  if (isError) return <div className="text-red-500">Error cargando transacciones</div>;
+  if (isError) return (
+    <div className="text-red-500 p-4 border rounded bg-red-50">
+      Error: {error?.message || 'Error cargando transacciones'}
+      <button 
+        onClick={() => queryClient.refetchQueries(['transactions'])}
+        className="ml-2 px-3 py-1 bg-red-100 rounded hover:bg-red-200"
+      >
+        Reintentar
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
