@@ -139,4 +139,89 @@ module.exports = function(app, db) {
       );
     });
   });
+
+app.get('/stats/summary', [
+  query('start_date').optional().isISO8601(),
+  query('end_date').optional().isISO8601()
+], async (req, res) => {
+  try {
+    const whereClauses = [];
+    const params = [];
+
+    if (req.query.start_date) {
+      whereClauses.push('date >= ?');
+      params.push(req.query.start_date);
+    }
+    if (req.query.end_date) {
+      whereClauses.push('date <= ?');
+      params.push(req.query.end_date);
+    }
+
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const summary = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT 
+          SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
+          SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as total_expense,
+          (SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) - 
+           SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END)) as balance
+        FROM transactions
+        ${where}
+      `, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/stats/categories', [
+  query('type').isIn(['income', 'expense']),
+  query('start_date').optional().isISO8601(),
+  query('end_date').optional().isISO8601()
+], async (req, res) => {
+  try {
+    const whereClauses = ['t.type = ?'];
+    const params = [req.query.type];
+
+    if (req.query.start_date) {
+      whereClauses.push('t.date >= ?');
+      params.push(req.query.start_date);
+    }
+    if (req.query.end_date) {
+      whereClauses.push('t.date <= ?');
+      params.push(req.query.end_date);
+    }
+
+    const categories = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          c.name as category,
+          SUM(t.amount) as total,
+          COUNT(t.id) as transactions
+        FROM transactions t
+        JOIN ${req.query.type === 'income' ? 'income_categories' : 'expense_categories'} c
+          ON t.category_id = c.id
+        WHERE ${whereClauses.join(' AND ')}
+        GROUP BY c.id
+        ORDER BY total DESC
+      `, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    res.json(categories);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 };
+
+  // estadistica

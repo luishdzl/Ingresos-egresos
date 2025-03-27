@@ -77,6 +77,7 @@ transactionsRoutes(appExpress, db);
 
 // Aquí podrías incluir endpoints globales (por ejemplo, para estadísticas) o en un módulo aparte
 
+
 appExpress.listen(port, () => {
   console.log(`API escuchando en http://localhost:${port}`);
 });

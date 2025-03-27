@@ -34,6 +34,10 @@ export const useCreateTransaction = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['transactions']);
+      queryClient.invalidateQueries(['stats']);
+    },
+    onError: (error) => {
+      console.error('Error creating transaction:', error);
     }
   });
 };

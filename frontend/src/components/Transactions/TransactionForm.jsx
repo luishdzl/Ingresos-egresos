@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import API from '../../api';
 import { format } from 'date-fns';
 import { ToggleSlider } from '../UI/ToggleSlider'; // Asegurar ruta correcta
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 export const TransactionForm = () => {
   // Configuración de react-hook-form
@@ -47,8 +49,13 @@ export const TransactionForm = () => {
   const mutation = useCreateTransaction();
 
   // Manejar envío del formulario
-  const onSubmit = (data) => {
-    mutation.mutate(data);
+  const onSubmit = async (data) => {
+    try {
+      await mutation.mutateAsync(data);
+      toast.success('Transacción agregada exitosamente!');
+    } catch (error) {
+      toast.error(`Error: ${error.message}`);
+    }
   };
 
   return (
@@ -110,9 +117,10 @@ export const TransactionForm = () => {
           <span className="text-red-500 text-sm">{errors.category_id.message}</span>
         )}
       </div>
-
+      {/* Campo de monto y tipo de moneda */}
+      <div className='flex'> 
       {/* Campo Monto */}
-      <div>
+      <div className='w-64 flex-1'>
         <label className="block text-sm font-medium">Monto</label>
         <input
     type="number"
@@ -160,18 +168,18 @@ export const TransactionForm = () => {
       </div>
 
       {/* Selector de Moneda */}
-      <div>
+      <div className='w-32 flex-1'>
         <label className="block text-sm font-medium">Moneda</label>
         <select
           {...register('currency', { required: "Seleccione moneda" })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-md"
         >
           <option value="USD">USD</option>
           <option value="EUR">EUR</option>
           <option value="MXN">MXN</option>
         </select>
       </div>
-
+      </div>
       {/* Selector de Fecha */}
       <div>
         <label className="block text-sm font-medium">Fecha</label>
@@ -183,7 +191,7 @@ export const TransactionForm = () => {
       </div>
 
       {/* Campo Descripción */}
-      <div>
+      <div className='shadow-md'>
         <label className="block text-sm font-medium">Descripción</label>
         <textarea
           {...register('description')}

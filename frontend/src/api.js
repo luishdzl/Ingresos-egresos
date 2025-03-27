@@ -35,7 +35,7 @@ export default {
     },
   },
   stats: {
-    summary: (params) => API.get('/stats/summary', { params }),
-    categories: (params) => API.get('/stats/categories', { params }),
+    summary: (params) => API.get('/stats/summary', { params }).then(res => res.data),
+    categories: (params) => API.get('/stats/categories', { params }).then(res => res.data),
   },
 };
