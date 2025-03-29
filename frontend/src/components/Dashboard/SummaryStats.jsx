@@ -15,7 +15,7 @@ export const SummaryStats = () => {
   }
 
   return (
-    <div className="grid grid-cols-3 gap-4 mb-8">
+    <div className="grid lg:grid-cols-3 md:grid-cols-2 sm:grid-cols-1 gap-4 mb-8">
       <div className="p-4 bg-white rounded-lg shadow">
         <h3 className="text-lg font-semibold">Ingresos</h3>
         <p className="text-2xl text-green-600">

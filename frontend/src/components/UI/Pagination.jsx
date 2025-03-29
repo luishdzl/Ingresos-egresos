@@ -1,6 +1,6 @@
 export const Pagination = ({ currentPage, totalPages, onPageChange, limit, onLimitChange }) => {
   return (
-    <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
+    <div className="flex flex-wrap md:flex-row items-center justify-center gap-4 mt-6">
       <div className="flex items-center gap-2">
         <button
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}

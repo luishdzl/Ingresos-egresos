@@ -12,7 +12,7 @@ export const ToggleSlider = ({
   useEffect(() => {
     const initialIndex = options.findIndex(opt => opt.value === defaultValue);
     if (initialIndex >= 0) {
-      setSliderPosition(`${(initialIndex * 50)}%`);
+      setSliderPosition(`${(initialIndex * (100 / options.length))}%`);
     }
   }, [defaultValue, options]);
 
@@ -21,12 +21,11 @@ export const ToggleSlider = ({
     onChange(value);
     
     const selectedIndex = options.findIndex(opt => opt.value === value);
-    setSliderPosition(`${(selectedIndex * 100)}%`);
+    setSliderPosition(`${(selectedIndex * (100 / options.length))}%`);
   };
 
   return (
     <div className="relative w-full h-12 bg-gray-100 rounded-full p-1 shadow-inner">
-      {/* Slider background */}
       <div
         className="absolute h-10 bg-gradient-to-r from-orange-200 to-orange-300 rounded-full transition-all duration-300"
         style={{
@@ -35,14 +34,13 @@ export const ToggleSlider = ({
         }}
       />
       
-      {/* Options container */}
       <div className="relative flex h-full">
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             onClick={() => handleOptionClick(option.value)}
-            className={`flex-1 flex items-center justify-center text-sm font-medium z-10 transition-colors duration-200 ${
+            className={`flex-1 flex items-center justify-center text-sm font-medium z-5 transition-colors duration-200 ${
               selectedValue === option.value ? 'text-gray-900' : 'text-gray-500'
             }`}
           >

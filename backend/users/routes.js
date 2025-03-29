@@ -4,7 +4,10 @@ module.exports = function(app, db) {
   // Obtener todos los usuarios
   app.get('/users', (req, res) => {
     db.all('SELECT * FROM users', (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) {
+        console.error('Error en GET /users:', err.message); // Log detallado
+        return res.status(500).json({ error: 'Error interno del servidor' });
+      }
       res.json(rows || []);
     });
   });

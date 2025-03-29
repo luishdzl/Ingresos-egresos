@@ -1,66 +1,81 @@
 // src/components/Transactions/TransactionForm.jsx
-import { useForm } from 'react-hook-form'; // Importación corregida (watch viene de useForm)
-import { useCreateTransaction } from '../../hooks/useTransactions';
+import { useForm } from 'react-hook-form';
+import { useCreateTransaction, useUpdateTransaction } from '../../hooks/useTransactions';
 import { useQuery } from '@tanstack/react-query';
 import API from '../../api';
 import { format } from 'date-fns';
-import { ToggleSlider } from '../UI/ToggleSlider'; // Asegurar ruta correcta
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { ToggleSlider } from '../UI/ToggleSlider';
+import { useNotifications } from '../common/Notifications';
 
-export const TransactionForm = () => {
-  // Configuración de react-hook-form
+export const TransactionForm = ({ initialData, onSuccess }) => {
+  const { showNotification } = useNotifications();
+  
   const { 
     register, 
-    handleSubmit, 
-    formState: { errors }, 
+    handleSubmit,
+    reset,
     watch, 
-    setValue // Añadir setValue para actualizar el campo type
+    setValue,
+    formState: { errors, isSubmitting } 
   } = useForm({
-    defaultValues: {
+    defaultValues: initialData || {
       date: format(new Date(), 'yyyy-MM-dd'),
       currency: 'USD',
-      type: 'income' // Valor inicial requerido para el ToggleSlider
+      type: 'income',
+      amount: '',
+      description: '',
+      category_id: ''
     }
   });
-  
-  // Observar cambios en el tipo de transacción
+
   const transactionType = watch('type');
   
-  // Consultar categorías de ingresos
-  const { 
-    data: incomeCategories, 
-    isLoading: loadingIncome 
-  } = useQuery({
+  const { data: incomeCategories, isLoading: loadingIncome } = useQuery({
     queryKey: ['income-categories'],
     queryFn: API.categories.income.get,
   });
-  
-  // Consultar categorías de gastos
-  const { 
-    data: expenseCategories, 
-    isLoading: loadingExpense 
-  } = useQuery({
+
+  const { data: expenseCategories, isLoading: loadingExpense } = useQuery({
     queryKey: ['expense-categories'],
     queryFn: API.categories.expense.categories.get,
   });
 
-  // Mutación para crear transacción
-  const mutation = useCreateTransaction();
+  const createMutation = useCreateTransaction();
+  const updateMutation = useUpdateTransaction();
 
-  // Manejar envío del formulario
   const onSubmit = async (data) => {
     try {
-      await mutation.mutateAsync(data);
-      toast.success('Transacción agregada exitosamente!');
+      if (initialData) {
+        await updateMutation.mutateAsync(
+          { id: initialData.id, ...data },
+          {
+            onSuccess: () => {
+              showNotification('Transacción actualizada exitosamente!', 'success');
+              onSuccess?.(); // Cierra el modal
+            }
+          }
+        );
+      }
+     else {
+        reset({
+          date: format(new Date(), 'yyyy-MM-dd'),
+          currency: 'USD',
+          type: 'income',
+          description: '',
+          amount: '',
+          category_id: ''
+        });
+      }
     } catch (error) {
-      toast.error(`Error: ${error.message}`);
+      showNotification(
+        error.response?.data?.error || error.message || 'Error procesando la transacción',
+        'error'
+      );
     }
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      {/* Sección Tipo de Transacción */}
       <div>
         <label className="block text-sm font-medium mb-2">Tipo</label>
         <ToggleSlider
@@ -68,7 +83,7 @@ export const TransactionForm = () => {
             { value: 'income', label: 'Ingreso' },
             { value: 'expense', label: 'Gasto' }
           ]}
-          defaultValue={transactionType} // Usar valor del formulario
+          defaultValue={transactionType}
           onChange={(value) => setValue('type', value, { shouldValidate: true })}
         />
         {errors.type && (
@@ -76,23 +91,19 @@ export const TransactionForm = () => {
         )}
       </div>
 
-      {/* Sección Categoría */}
       <div>
         <label className="block text-sm font-medium">Categoría</label>
         <select
-          {...register('category_id', { 
-            required: "Seleccione una categoría" 
-          })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          {...register('category_id', { required: "Seleccione una categoría" })}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-50 border text-gray-900 text-sm p-2.5"
           disabled={!transactionType}
         >
           <option value="">
             {transactionType ? 'Seleccione categoría' : 'Primero seleccione tipo'}
           </option>
           
-          {/* Cargar categorías según tipo */}
-          {transactionType === 'income' && 
-            (loadingIncome ? (
+          {transactionType === 'income' && (
+            loadingIncome ? (
               <option disabled>Cargando categorías...</option>
             ) : (
               incomeCategories?.map(category => (
@@ -100,10 +111,11 @@ export const TransactionForm = () => {
                   {category.name}
                 </option>
               ))
-            ))}
+            )
+          )}
           
-          {transactionType === 'expense' && 
-            (loadingExpense ? (
+          {transactionType === 'expense' && (
+            loadingExpense ? (
               <option disabled>Cargando categorías...</option>
             ) : (
               expenseCategories?.map(category => (
@@ -111,102 +123,70 @@ export const TransactionForm = () => {
                   {category.name}
                 </option>
               ))
-            ))}
+            )
+          )}
         </select>
         {errors.category_id && (
           <span className="text-red-500 text-sm">{errors.category_id.message}</span>
         )}
       </div>
-      {/* Campo de monto y tipo de moneda */}
-      <div className='flex'> 
-      {/* Campo Monto */}
-      <div className='w-64 flex-1'>
-        <label className="block text-sm font-medium">Monto</label>
-        <input
-    type="number"
-    step="0.01"
-    {...register('amount', { 
-      required: "Ingrese un monto",
-      min: { 
-        value: 0.01, 
-        message: "Monto mínimo: 0.01" 
-      },
-      valueAsNumber: true,
-      validate: (value) => value > 0 || "El monto debe ser positivo"
-    })}
-    onKeyPress={(e) => {
-      // Bloquear caracteres no numéricos excepto punto decimal
-      if (!/[0-9.]/.test(e.key)) {
-        e.preventDefault();
-      }
-      
-      // Evitar múltiples puntos
-      if (e.key === '.' && e.target.value.includes('.')) {
-        e.preventDefault();
-      }
-    }}
-    onInput={(e) => {
-      // Limpiar valor y asegurar positivo
-      let value = e.target.value;
-      value = value.replace(/[^0-9.]/g, '');
-      value = value.replace(/(\..*)\./g, '$1');
-      
-      // Eliminar ceros iniciales
-      if (value === '0') value = '';
-      
-      // Convertir a número y asegurar positivo
-      const numericValue = Math.abs(parseFloat(value || 0));
-      
-      // Actualizar valor en el input
-      e.target.value = numericValue > 0 ? numericValue.toFixed(2) : '';
-    }}
-    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-  />
-  {errors.amount && (
-    <span className="text-red-500 text-sm">{errors.amount.message}</span>
-  )}
+
+      <div className='flex gap-2'>
+        <div className='flex-1'>
+          <label className="block text-sm font-medium">Monto</label>
+          <input
+            type="number"
+            step="0.01"
+            {...register('amount', { 
+              required: "Ingrese un monto",
+              min: { value: 0.01, message: "Monto mínimo: 0.01" },
+              valueAsNumber: true,
+              validate: value => value > 0 || "El monto debe ser positivo"
+            })}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-50 border text-gray-900 text-sm p-2.5"
+          />
+          {errors.amount && (
+            <span className="text-red-500 text-sm">{errors.amount.message}</span>
+          )}
+        </div>
+
+        <div className='w-32'>
+          <label className="block text-sm font-medium">Moneda</label>
+          <select
+            {...register('currency', { required: "Seleccione moneda" })}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-50 border text-gray-900 text-sm p-2.5"
+          >
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="MXN">MXN</option>
+          </select>
+        </div>
       </div>
 
-      {/* Selector de Moneda */}
-      <div className='w-32 flex-1'>
-        <label className="block text-sm font-medium">Moneda</label>
-        <select
-          {...register('currency', { required: "Seleccione moneda" })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-md"
-        >
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-          <option value="MXN">MXN</option>
-        </select>
-      </div>
-      </div>
-      {/* Selector de Fecha */}
       <div>
         <label className="block text-sm font-medium">Fecha</label>
         <input
           type="date"
           {...register('date', { required: "Seleccione fecha" })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-50 border text-gray-900 text-sm p-2.5"
         />
       </div>
 
-      {/* Campo Descripción */}
-      <div className='shadow-md'>
+      <div>
         <label className="block text-sm font-medium">Descripción</label>
         <textarea
           {...register('description')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-50 border text-gray-900 text-sm p-2.5"
           rows="3"
         />
       </div>
 
-      {/* Botón de Envío */}
       <button
         type="submit"
         className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-        disabled={mutation.isPending}
+        disabled={isSubmitting}
       >
-        {mutation.isPending ? 'Guardando...' : 'Agregar Transacción'}
+        {isSubmitting ? 'Guardando...' : initialData ? 'Actualizar Transacción' : 'Agregar Transacción'}
       </button>
     </form>
   );

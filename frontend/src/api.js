@@ -11,6 +11,8 @@ export default {
     get: (params) => API.get('/transactions', { params }).then(res => res.data),
     create: (data) => API.post('/transactions', data),
     delete: (id) => API.delete(`/transactions/${id}`),
+    update: (id, data) => API.put(`/transactions/${id}`, data),
+    getById: (id) => API.get(`/transactions/${id}`).then(res => res.data),
   },
   categories: {
     income: {
@@ -37,5 +39,11 @@ export default {
   stats: {
     summary: (params) => API.get('/stats/summary', { params }).then(res => res.data),
     categories: (params) => API.get('/stats/categories', { params }).then(res => res.data),
+  },
+  users: {
+    get: () => API.get('/users').then(res => res.data),
+    create: (data) => API.post('/users', data).then(res => res.data),
+    update: (id, data) => API.put(`/users/${id}`, data).then(res => res.data),
+    delete: (id) => API.delete(`/users/${id}`),
   },
 };

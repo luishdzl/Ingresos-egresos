@@ -41,3 +41,13 @@ export const useCreateTransaction = () => {
     }
   });
 };
+export const useUpdateTransaction = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }) => API.transactions.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['transactions']);
+      queryClient.invalidateQueries(['stats']);
+    }
+  });
+};

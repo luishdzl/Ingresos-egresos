@@ -222,6 +222,64 @@ app.get('/stats/categories', [
   }
 });
 
-};
+// En backend/transactions/routes.js
+app.put('/transactions/:id', transactionValidations, (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  // estadistica
+  const { id } = req.params;
+  const { type, amount, currency, category_id, date, description } = req.body;
+
+  // Verificar existencia de la transacción
+  db.get('SELECT * FROM transactions WHERE id = ?', [id], (err, transaction) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!transaction) return res.status(404).json({ error: 'Transacción no encontrada' });
+
+    // Validar categoría
+    const table = type === 'income' ? 'income_categories' : 'expense_categories';
+    db.get(`SELECT id FROM ${table} WHERE id = ?`, [category_id], (err, category) => {
+      if (err || !category) {
+        return res.status(400).json({ error: 'Categoría inválida para el tipo especificado' });
+      }
+
+      // Actualizar transacción
+      db.run(
+        `UPDATE transactions SET
+          type = ?,
+          amount = ?,
+          currency = ?,
+          category_id = ?,
+          date = ?,
+          description = ?
+        WHERE id = ?`,
+        [type, amount, currency.toUpperCase(), category_id, date, description, id],
+        function(err) {
+          if (err) return res.status(500).json({ error: err.message });
+          
+          // Obtener transacción actualizada
+          db.get(`
+            SELECT t.*, 
+              COALESCE(ic.name, ec.name) as category_name
+            FROM transactions t
+            LEFT JOIN income_categories ic 
+              ON t.type = 'income' AND t.category_id = ic.id
+            LEFT JOIN expense_categories ec 
+              ON t.type = 'expense' AND t.category_id = ec.id
+            WHERE t.id = ?
+          `, [id], (err, updatedTransaction) => {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            // Convertir amount a número
+            const responseData = {
+              ...updatedTransaction,
+              amount: parseFloat(updatedTransaction.amount)
+            };
+            
+            res.json(responseData);
+          });
+        }
+      );
+    });
+  });
+});
+};
